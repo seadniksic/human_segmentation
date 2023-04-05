@@ -64,6 +64,7 @@ if __name__ == "__main__":
 
     image = aggregate_downsample(image, 256)
     label = aggregate_downsample(label, 256)
+    print(label[147,136])
 
     fig, ax = plt.subplots(1,2)
     ax[0].imshow(image)

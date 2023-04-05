@@ -46,7 +46,7 @@ class SupervisedMLFramework:
         print(f"% correct: {correct / len(self.test_dataset)}")
         return testing_loss / len(self.test_dataloader)
 
-    def train(self, epochs, loss_function, optimizer, scheduler, save_dir, batch_size=32):
+    def train(self, epochs, loss_function, optimizer, save_dir, scheduler=None, batch_size=32):
 
         train_dataloader = DataLoader(self.train_dataset, batch_size)
 
@@ -76,7 +76,8 @@ class SupervisedMLFramework:
 
             avg_epoch_loss = total_batch_loss / len(train_dataloader)
 
-            scheduler.step()
+            if scheduler != None:
+                scheduler.step()
 
             self.writer.add_scalar('Loss/train', avg_epoch_loss, epoch)
             self.writer.add_scalar('Loss/validation', epoch_validation_loss, epoch)
