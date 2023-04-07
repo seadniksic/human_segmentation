@@ -5,6 +5,8 @@ import cv2
 import matplotlib.pyplot as plt
 import os
 import pickle
+import torch.nn as nn
+import torch
 
 def aggregate_downsample(img, target_size):
 
@@ -33,6 +35,8 @@ def aggregate_downsample(img, target_size):
 
     return output_img
 
+
+
 def inv_aggregate_downsample(img, target_size):
     pass
 
@@ -48,11 +52,13 @@ if __name__ == "__main__":
         sample_names = pickle.load(f)
     # aggregate_downsample(np.array(img), downsample_target)
     img_dir = "..\\data\\AHP\\AHP\\train\\JPEGImages"
-    gt_dir = "..\\data\\AHP\\AHP\\train\\Annotations"
+    gt_dir = "..\\data\\AHP\\AHP\\train\\Annotations"\
+    
+    print(sample_names)
 
     idx = 1
 
-    print(type(sample_names[idx]))
+    print(sample_names[idx])
 
     img_path = os.path.join(img_dir, sample_names[idx]) + ".jpg"
     annotation_path = os.path.join(gt_dir, sample_names[idx]) + ".png"
@@ -62,13 +68,43 @@ if __name__ == "__main__":
     image = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
     label = cv2.imread(annotation_path)
 
+    print(image.shape)
+    print(label.shape)
+
     image = aggregate_downsample(image, 256)
     label = aggregate_downsample(label, 256)
-    print(label[147,136])
+
+    #Convert to ground truth mask
+    #label[label > 0] = 1
+
+    loss = nn.CrossEntropyLoss()
+
+
+    #print(label[147,136])
 
     fig, ax = plt.subplots(1,2)
     ax[0].imshow(image)
     ax[1].imshow(label)
+
+    # prediction = image[:,:, :2]
+    # target = label[:, :, -1]
+    # print(prediction.shape)
+
+    # prediction = torch.tensor(prediction).float()
+    # prediction = prediction.permute(2,0,1).unsqueeze(dim=0)
+    # target = torch.tensor(target).long().unsqueeze(dim=0)
+    # print(prediction.shape)
+    # print(target.shape)
+
+    # print(loss(prediction, target))
+    # # target = torch.unsqueeze(target, dim=0).shape
+    # print(target.dtype)
+
+    #print(nn.functional.one_hot(target, num_classes=2).shape)
+
+    
+
+
 
     plt.show()
 

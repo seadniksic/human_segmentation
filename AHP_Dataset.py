@@ -4,13 +4,15 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 import os
 import cv2
+import helpers.photo_utils as pu
+import torch
+import matplotlib.pyplot as plt
 
 
 class AHP_Dataset(Dataset):
-    def __init__(self, name_mapping, img_dir, gt_dir, transform_list):
+    def __init__(self, name_mapping, img_dir, gt_dir):
         self.img_dir = img_dir
         self.gt_dir = gt_dir
-        self.transform_list = transform_list
         with open(name_mapping, "rb") as f:
             self.sample_names = pickle.load(f)
 
@@ -21,11 +23,13 @@ class AHP_Dataset(Dataset):
         img_path = os.path.join(self.img_dir, self.sample_names[idx]) + ".jpg"
         annotation_path = os.path.join(self.gt_dir, self.sample_names[idx]) + ".png"
         
-        image = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
+        image = cv2.imread(img_path)
         label = cv2.imread(annotation_path)
 
-        for transform in self.transform_list:
-            image = transform(image)
-            label = transform(label)
+
+        image = torch.as_tensor(image).permute(2,0,1).float()
+        label = torch.as_tensor(label[:,:,0]).long()
+
+        image = image / 255 #normalize image pixel values   
         
         return image, label

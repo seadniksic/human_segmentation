@@ -4,15 +4,21 @@ from torch import nn
 from torch.utils.data import DataLoader, SequentialSampler
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
-
-
+import matplotlib.pyplot as plt
+import gc
+from tqdm import tqdm
+import os
 class SupervisedMLFramework:
 
-    def __init__(self, model_name, model, train_dataset, test_dataset) -> None:
+    def __init__(self, model_name, model, train_dataset, test_dataset, batch_size) -> None:
         self.model = model
         self.train_dataset = train_dataset
         self.test_dataset = test_dataset
         self.model_name = model_name
+
+        if self.train_dataset != None and self.test_dataset != None:
+            self.train_dataloader = DataLoader(self.train_dataset, batch_size)
+            self.test_dataloader = DataLoader(self.test_dataset, batch_size)
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -26,35 +32,38 @@ class SupervisedMLFramework:
         
     def test(self, loss_function, batch_size=32):
         
-        test_dataloader = DataLoader(self.test_dataset, batch_size)
+        print(f"\n {'-'*10} Testing {'-'*10} ")
 
-        testing_loss, correct = 0, 0
-        for batch, (X, y) in enumerate(test_dataloader):
+        testing_loss= 0
+        correct = []
+        for batch, (X, y) in enumerate(self.test_dataloader):
+            with torch.no_grad():
 
-            print(X.shape)
+                X = X.to(self.device)
+                y = y.to(self.device)
 
-            X = X.to(self.device)
-            y = y.to(self.device)
+                prediction = self.model(X)
+                loss = loss_function(prediction, y)
 
-            prediction = self.model(X)
-            loss = loss_function(prediction, y)
 
-            correct += (prediction.argmax(1) == y).type(torch.float).sum().item()
+                avg_percent_pixels_correct = torch.sum(torch.round(prediction[:,1, :, :]).long() == y) / len(X)
+                correct.append(avg_percent_pixels_correct.item())
 
-            testing_loss += loss.item()
+                testing_loss += loss.item()
 
-        print(f"% correct: {correct / len(self.test_dataset)}")
+        avg = sum(correct) / len(correct)
+
+        print(f"avg % pixels correct: {avg  / y.shape[1]**2 * 100}")
         return testing_loss / len(self.test_dataloader)
 
     def train(self, epochs, loss_function, optimizer, save_dir, scheduler=None, batch_size=32):
-
-        train_dataloader = DataLoader(self.train_dataset, batch_size)
 
         for epoch in range(epochs):
             
             print(f"\n {'-'*10} Epoch {epoch} {'-'*10} ")
             total_batch_loss = 0
-            for batch, (X, y) in enumerate(train_dataloader):
+            for batch, (X, y) in tqdm(enumerate(self.train_dataloader), total=len(self.train_dataloader)):
+
 
                 X = X.to(self.device)
                 y = y.to(self.device)
@@ -67,36 +76,47 @@ class SupervisedMLFramework:
                 loss.backward()
                 optimizer.step()
 
-                if batch % 100 == 0:
+                if batch % 50 == 0:
+                    self.writer.add_scalar(f'Loss/train (batch) epoch {epoch}', loss.item(), batch)
                     avg_loss_over_batch, current = loss.item(), (batch + 1) * len(X)
                     total_batch_loss += avg_loss_over_batch
                     print(f"loss: {loss:>7f}  [{current:>5d}/{len(self.train_dataset):>5d}]")
 
+                del X, y, prediction, loss
+                gc.collect()
+                torch.cuda.empty_cache()
+            
             epoch_validation_loss = self.test(loss_function)
 
-            avg_epoch_loss = total_batch_loss / len(train_dataloader)
+            avg_epoch_loss = total_batch_loss / len(self.train_dataloader)
 
             if scheduler != None:
-                scheduler.step()
+                print(f"Learning rate for last epoch: {optimizer.param_groups[0]['lr']}")
+                scheduler.step(epoch_validation_loss)
 
             self.writer.add_scalar('Loss/train', avg_epoch_loss, epoch)
             self.writer.add_scalar('Loss/validation', epoch_validation_loss, epoch)
 
-            if epoch % 20 == 0 and epoch != 0:
-                print(f"\n {'-'*10} Saving Checkpoint {epoch} {'-'*10} ")
-                torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': self.model.module.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss': epoch_validation_loss
-                }, save_dir + self.model_name + ".pt")
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+
+            print(f"\n {'-'*10} Saving Checkpoint {epoch} {'-'*10} ")
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': self.model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': epoch_validation_loss
+            }, save_dir + self.model_name + ".pt")
      
     def tune(self,  lr, epochs, loss_function, optim, batch_size=32, k=5):
 
         optimizer = optim(self.model.parameters(), lr=lr)
 
-        #Do k fold cross validation on train portion.
+        percent_data_to_tune_on = .3
+
+        #Do k fold cross validation on 30% of train portion.
         indices = np.random.permutation(range(len(self.train_dataset)))
+        indices = indices[:int(percent_data_to_tune_on * len(indices))]
         fold_size = int(len(indices) / k)
         k_fold_indices = list(range(len(indices)))
 
@@ -136,6 +156,10 @@ class SupervisedMLFramework:
                         loss, current = loss.item(), (batch + 1) * len(X)
                         total_train_loss += loss
                         print(f"loss: {loss:>7f}  [{current:>5d}/{len(train_sampler):>5d}]")
+
+                    del X, y, prediction, loss
+                    gc.collect()
+                    torch.cuda.empty_cache()
                 
                 average_epoch_train_loss = total_train_loss / len(train_dataloader)
 
@@ -176,4 +200,6 @@ class SupervisedMLFramework:
 
         sample = sample.to(self.device)
         with torch.no_grad():
-            return self.model(sample)
+            pred = self.model(sample)
+            pred = torch.argmax(pred, dim=1).squeeze()
+            return pred.cpu()
