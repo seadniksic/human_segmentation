@@ -34,7 +34,7 @@ class UNet(nn.Module):
         self.transpose_conv3 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2, padding=0)
         self.transpose_conv4 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2, padding=0)
 
-        self.output = nn.Conv2d(in_channels=64, out_channels=3, kernel_size=3, padding=(1,1), padding_mode='zeros')
+        self.output = nn.Conv2d(in_channels=64, out_channels=2, kernel_size=3, padding=(1,1), padding_mode='zeros')
 
     def forward(self, image):
         # print('image size: {}'.format(image.shape))

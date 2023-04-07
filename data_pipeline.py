@@ -26,10 +26,10 @@ test_dataset = AHP(TEST_MAPPING, IMG_DIR, GT_DIR)
 model_name = "initial_test_Unet"
 custom_model = UNet()
 
-model = sml.SupervisedMLFramework(model_name, custom_model, train_dataset, test_dataset, batch_size=64)
+model = sml.SupervisedMLFramework(model_name, custom_model, train_dataset, test_dataset, batch_size=24)
 
 optimizer = torch.optim.AdamW(model.model.parameters(), lr=start_lr)
-scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience=2)
+scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience=1, threshold=.01)
 
 criterion = nn.CrossEntropyLoss()
 

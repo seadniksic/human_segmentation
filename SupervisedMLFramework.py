@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import gc
 from tqdm import tqdm
 import os
+from torch.cuda.amp import *
 class SupervisedMLFramework:
 
     def __init__(self, model_name, model, train_dataset, test_dataset, batch_size) -> None:
@@ -15,6 +16,8 @@ class SupervisedMLFramework:
         self.train_dataset = train_dataset
         self.test_dataset = test_dataset
         self.model_name = model_name
+
+        model.apply(self.init_weights)
 
         if self.train_dataset != None and self.test_dataset != None:
             self.train_dataloader = DataLoader(self.train_dataset, batch_size)
@@ -29,6 +32,11 @@ class SupervisedMLFramework:
     
     def __del__(self):
         self.writer.close()
+
+    def init_weights(self, m): #taken from pytorch forums and modified!
+        if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+            torch.nn.init.xavier_uniform_(m.weight)
+            m.bias.data.fill_(0.01)
         
     def test(self, loss_function, batch_size=32):
         
@@ -36,12 +44,16 @@ class SupervisedMLFramework:
 
         testing_loss= 0
         correct = []
+
+        self.model.eval()
+
         for batch, (X, y) in enumerate(self.test_dataloader):
             with torch.no_grad():
 
                 X = X.to(self.device)
                 y = y.to(self.device)
 
+                #with torch.cuda.amp.autocast():
                 prediction = self.model(X)
                 loss = loss_function(prediction, y)
 
@@ -58,6 +70,7 @@ class SupervisedMLFramework:
 
     def train(self, epochs, loss_function, optimizer, save_dir, scheduler=None, batch_size=32):
 
+        scaler = GradScaler()
         for epoch in range(epochs):
             
             print(f"\n {'-'*10} Epoch {epoch} {'-'*10} ")
@@ -73,20 +86,30 @@ class SupervisedMLFramework:
 
                 #Backprop
                 optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+
+                # optimizer.zero_grad()
+                # loss.backward()
+                # optimizer.step()
+
+                total_batch_loss += loss.item()
 
                 if batch % 50 == 0:
                     self.writer.add_scalar(f'Loss/train (batch) epoch {epoch}', loss.item(), batch)
-                    avg_loss_over_batch, current = loss.item(), (batch + 1) * len(X)
-                    total_batch_loss += avg_loss_over_batch
+                    current = (batch + 1) * len(X)
                     print(f"loss: {loss:>7f}  [{current:>5d}/{len(self.train_dataset):>5d}]")
 
                 del X, y, prediction, loss
                 gc.collect()
                 torch.cuda.empty_cache()
+
             
             epoch_validation_loss = self.test(loss_function)
+
+            self.model.train()
 
             avg_epoch_loss = total_batch_loss / len(self.train_dataloader)
 
@@ -94,6 +117,8 @@ class SupervisedMLFramework:
                 print(f"Learning rate for last epoch: {optimizer.param_groups[0]['lr']}")
                 scheduler.step(epoch_validation_loss)
 
+            print(f"Average Epoch (Train) Loss: {avg_epoch_loss}")
+            print(f"Epoch Validation Loss: {epoch_validation_loss}")
             self.writer.add_scalar('Loss/train', avg_epoch_loss, epoch)
             self.writer.add_scalar('Loss/validation', epoch_validation_loss, epoch)
 
