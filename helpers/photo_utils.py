@@ -13,6 +13,8 @@ def aggregate_downsample(img, target_size):
 
     curr_val = max(img.shape)
 
+    print(img.shape)
+
     downsample_factor = math.ceil(curr_val / target_size)
     #convert image largest_dim to leading_dimension size
     downsampled_image = sk.measure.block_reduce(img, (downsample_factor, downsample_factor, 1), np.mean).astype(int)
@@ -44,7 +46,7 @@ def aggregate_upsample(cropped_img, orig_size, orig_target_size):
 
     upsample_factor = math.ceil(curr_val / orig_target_size)
 
-    height_downsampled, width_downsampled = cropped_img.shape
+    height_downsampled, width_downsampled = int(orig_size[0] / upsample_factor), int(orig_size[1] / upsample_factor)
 
     total_padding_rows = orig_target_size - height_downsampled
     total_padding_cols = orig_target_size - width_downsampled
@@ -52,17 +54,14 @@ def aggregate_upsample(cropped_img, orig_size, orig_target_size):
     top_padding = int(total_padding_rows / 2)
     left_padding = int(total_padding_cols / 2)
 
-    print(cropped_img.shape)
-
-    print(top_padding)
-    print(top_padding+height_downsampled)
-
     temp_array = cropped_img[top_padding:top_padding+height_downsampled, left_padding:left_padding+width_downsampled]
-    print(temp_array.shape)
 
     temp_array = scipy.ndimage.zoom(temp_array, upsample_factor, order=1)
 
-    print(temp_array.shape)
+    height_diff = orig_size[0] - temp_array.shape[0]
+    width_diff = orig_size[1] - temp_array.shape[1]
+
+    temp_array = np.pad(temp_array, ((0, height_diff), (0, width_diff)), 'constant', constant_values=0)
 
     return temp_array
 

@@ -29,17 +29,17 @@ model_specific_name = "Standard_BatchNorm"
 model_name = model_top_level_name + "_" + model_specific_name
 
 log_dir = "long_trains"
-experiment_name = "2"
+experiment_name = "3"
 log_experiment_name = model_name + "_" + experiment_name
 
 custom_model = UNet()
 
-model = sml.SupervisedMLFramework(model_name, custom_model, train_dataset, test_dataset, init_weights=True, 
+model = sml.SupervisedMLFramework(model_name+experiment_name, custom_model, train_dataset, test_dataset, init_weights=True, 
                                   batch_size=18, log_dir=os.path.join(log_dir, log_experiment_name))
 
 optimizer = torch.optim.AdamW(model.model.parameters(), lr=start_lr)
-scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, threshold=.0001)
-#scheduler = lr_scheduler.StepLR(optimizer, step_size=)
+#scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, threshold=.0001)
+scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[5, 10], gamma=.5)
 
 criterion = nn.CrossEntropyLoss()
 
