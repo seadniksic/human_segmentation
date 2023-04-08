@@ -7,6 +7,7 @@ import os
 import pickle
 import torch.nn as nn
 import torch
+import scipy.ndimage
 
 def aggregate_downsample(img, target_size):
 
@@ -33,12 +34,43 @@ def aggregate_downsample(img, target_size):
     # plt.imshow(output_img)
     # plt.show()
 
-    return output_img
+    return output_img, (height_downsampled, width_downsampled)
 
 
 
-def inv_aggregate_downsample(img, target_size):
-    pass
+def aggregate_upsample(cropped_img, orig_size, orig_target_size):
+
+    curr_val = max(orig_size)
+
+    upsample_factor = math.ceil(curr_val / orig_target_size)
+
+    height_downsampled, width_downsampled = cropped_img.shape
+
+    total_padding_rows = orig_target_size - height_downsampled
+    total_padding_cols = orig_target_size - width_downsampled
+
+    top_padding = int(total_padding_rows / 2)
+    left_padding = int(total_padding_cols / 2)
+
+    print(cropped_img.shape)
+
+    print(top_padding)
+    print(top_padding+height_downsampled)
+
+    temp_array = cropped_img[top_padding:top_padding+height_downsampled, left_padding:left_padding+width_downsampled]
+    print(temp_array.shape)
+
+    temp_array = scipy.ndimage.zoom(temp_array, upsample_factor, order=1)
+
+    print(temp_array.shape)
+
+    return temp_array
+
+
+
+
+
+
 
 
 

@@ -10,47 +10,42 @@ import torch.optim.lr_scheduler as lr_scheduler
 import SupervisedMLFramework as sml
 import helpers.photo_utils as pu
 from AHP_Dataset import AHP_Dataset as AHP
-from custom_models.unet_better import UNet
+from custom_models.unet_batchnorm import UNet
 from custom_models.SS_v1 import SS_v1
+import os
 
 TRAIN_MAPPING = "data\\AHP\\train_annotations.pkl"
 TEST_MAPPING = "data\\AHP\\test_annotations.pkl"
 IMG_DIR = "data\\AHP\\AHP\\train\\Processed_Images"
 GT_DIR = "data\\AHP\\AHP\\train\\Processed_Annotations"
 
-start_lr = .01
+start_lr = .001
 
 train_dataset = AHP(TRAIN_MAPPING, IMG_DIR, GT_DIR)
 test_dataset = AHP(TEST_MAPPING, IMG_DIR, GT_DIR)
 
-model_name = "initial_test_Unet"
+model_top_level_name = "UNet"
+model_specific_name = "Standard_BatchNorm"
+model_name = model_top_level_name + "_" + model_specific_name
+
+log_dir = "long_trains"
+experiment_name = "2"
+log_experiment_name = model_name + "_" + experiment_name
+
 custom_model = UNet()
 
-model = sml.SupervisedMLFramework(model_name, custom_model, train_dataset, test_dataset, batch_size=24)
+model = sml.SupervisedMLFramework(model_name, custom_model, train_dataset, test_dataset, init_weights=True, 
+                                  batch_size=18, log_dir=os.path.join(log_dir, log_experiment_name))
 
 optimizer = torch.optim.AdamW(model.model.parameters(), lr=start_lr)
-scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience=1, threshold=.01)
+scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, threshold=.0001)
+#scheduler = lr_scheduler.StepLR(optimizer, step_size=)
 
 criterion = nn.CrossEntropyLoss()
 
 train_params = {"epochs": 100, "loss_function": criterion,
          "optimizer": optimizer, "scheduler": scheduler,
-         "save_dir": "checkpoints\\test1\\"}
+         "save_dir": "checkpoints\\long_trains\\"}
 
 model.train(**train_params)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

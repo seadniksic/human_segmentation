@@ -11,13 +11,14 @@ import os
 from torch.cuda.amp import *
 class SupervisedMLFramework:
 
-    def __init__(self, model_name, model, train_dataset, test_dataset, batch_size) -> None:
+    def __init__(self, model_name, model, train_dataset, test_dataset, batch_size, init_weights = True, log_dir="runs") -> None:
         self.model = model
         self.train_dataset = train_dataset
         self.test_dataset = test_dataset
         self.model_name = model_name
 
-        model.apply(self.init_weights)
+        if init_weights:
+            model.apply(self.init_weights)
 
         if self.train_dataset != None and self.test_dataset != None:
             self.train_dataloader = DataLoader(self.train_dataset, batch_size)
@@ -28,7 +29,7 @@ class SupervisedMLFramework:
         #Move model to GPU if available
         self.model = model.to(self.device)
 
-        self.writer = SummaryWriter()
+        self.writer = SummaryWriter(log_dir=log_dir)
     
     def __del__(self):
         self.writer.close()
@@ -47,6 +48,8 @@ class SupervisedMLFramework:
 
         self.model.eval()
 
+        avg_percent_pixels_correct = 0
+
         for batch, (X, y) in enumerate(self.test_dataloader):
             with torch.no_grad():
 
@@ -57,25 +60,27 @@ class SupervisedMLFramework:
                 prediction = self.model(X)
                 loss = loss_function(prediction, y)
 
-
-                avg_percent_pixels_correct = torch.sum(torch.round(prediction[:,1, :, :]).long() == y) / len(X)
-                correct.append(avg_percent_pixels_correct.item())
+                class_preds = torch.argmax(prediction, dim=1)
+                avg_percent_pixels_correct += torch.mean(torch.sum(torch.sum(class_preds == y, dim=2),dim=1, dtype=torch.float32)) / X.shape[2]**2
 
                 testing_loss += loss.item()
 
-        avg = sum(correct) / len(correct)
+        avg = avg_percent_pixels_correct / len(self.test_dataloader)
 
-        print(f"avg % pixels correct: {avg  / y.shape[1]**2 * 100}")
+        print(f"avg % pixels correct: {avg  * 100}")
         return testing_loss / len(self.test_dataloader)
 
-    def train(self, epochs, loss_function, optimizer, save_dir, scheduler=None, batch_size=32):
+    def train(self, epochs, loss_function, optimizer, save_dir, scheduler=None):
 
+        self.model.train()
         scaler = GradScaler()
         for epoch in range(epochs):
-            
+
+    
             print(f"\n {'-'*10} Epoch {epoch} {'-'*10} ")
+            print(f"Learning rate for this epoch: {optimizer.param_groups[0]['lr']}")
             total_batch_loss = 0
-            for batch, (X, y) in tqdm(enumerate(self.train_dataloader), total=len(self.train_dataloader)):
+            for batch, (X, y) in enumerate(self.train_dataloader):  
 
 
                 X = X.to(self.device)
@@ -84,38 +89,45 @@ class SupervisedMLFramework:
                 prediction = self.model(X)
                 loss = loss_function(prediction, y)
 
+                class_preds = torch.argmax(prediction, dim=1)
+
+                avg_num_pixels_correct = torch.mean(torch.sum(torch.sum(class_preds == y, dim=2),dim=1, dtype=torch.float32)).item()
+
+                #print(f"avg % pixels correct: {avg_num_pixels_correct / X.shape[2]**2}")
+
                 #Backprop
                 optimizer.zero_grad()
 
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
+                # scaler.scale(loss).backward()
+                # scaler.step(optimizer)
+                # scaler.update()
 
-                # optimizer.zero_grad()
-                # loss.backward()
-                # optimizer.step()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
                 total_batch_loss += loss.item()
 
                 if batch % 50 == 0:
                     self.writer.add_scalar(f'Loss/train (batch) epoch {epoch}', loss.item(), batch)
                     current = (batch + 1) * len(X)
+                    print(f"avg % pixels correct: {avg_num_pixels_correct / X.shape[2]**2}")
                     print(f"loss: {loss:>7f}  [{current:>5d}/{len(self.train_dataset):>5d}]")
 
                 del X, y, prediction, loss
                 gc.collect()
                 torch.cuda.empty_cache()
 
+            print(f"loss: {total_batch_loss}")
             
             epoch_validation_loss = self.test(loss_function)
 
             self.model.train()
 
-            avg_epoch_loss = total_batch_loss / len(self.train_dataloader)
+            avg_epoch_loss = total_batch_loss / len(self.train_dataset)
 
             if scheduler != None:
-                print(f"Learning rate for last epoch: {optimizer.param_groups[0]['lr']}")
-                scheduler.step(epoch_validation_loss)
+                scheduler.step(total_batch_loss)
 
             print(f"Average Epoch (Train) Loss: {avg_epoch_loss}")
             print(f"Epoch Validation Loss: {epoch_validation_loss}")
@@ -132,6 +144,86 @@ class SupervisedMLFramework:
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': epoch_validation_loss
             }, save_dir + self.model_name + ".pt")
+     
+    def train_single_batch(self):
+        self.model.train()
+        scaler = GradScaler()
+        for epoch in range(epochs):
+            
+            print(f"\n {'-'*10} Epoch {epoch} {'-'*10} ")
+            total_batch_loss = 0
+            for batch, (X, y) in enumerate(self.train_dataloader):  
+
+
+                X = X.to(self.device)
+                y = y.to(self.device)
+
+                prediction = self.model(X)
+                loss = loss_function(prediction, y)
+
+                class_preds = torch.argmax(prediction, dim=1)
+                print((class_preds == y).shape)
+                avg_num_pixels_correct = torch.mean(torch.sum(torch.sum(class_preds == y, dim=2),dim=1, dtype=torch.float32)).item()
+                #print(avg_num_pixels_correct)
+                print(f"avg % pixels correct: {avg_num_pixels_correct / X.shape[2]**2}")
+
+                # print(overlap.shape)
+
+                #Backprop
+                optimizer.zero_grad()
+
+                # scaler.scale(loss).backward()
+                # scaler.step(optimizer)
+                # scaler.update()
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                total_batch_loss += loss.item()
+
+                self.writer.add_scalar(f'Loss/train', loss.item(), epoch)
+                if batch % 50 == 0:
+                    #self.writer.add_scalar(f'Loss/train (batch) epoch {epoch}', loss.item(), batch)
+                    current = (batch + 1) * len(X)
+                    #print(f"loss: {loss:>7f}  [{current:>5d}/{len(self.train_dataset):>5d}]")
+
+                del X, y, prediction, loss
+                gc.collect()
+                torch.cuda.empty_cache()
+
+                break
+
+            print(f"loss: {total_batch_loss}")
+            #print(f"Learning rate for last epoch: {optimizer.param_groups[0]['lr']}")
+            #epoch_validation_loss = self.test(loss_function)
+
+            #self.model.train()
+
+            #avg_epoch_loss = total_batch_loss / len(self.train_dataset)
+
+            if scheduler != None:
+                print(f"Learning rate for last epoch: {optimizer.param_groups[0]['lr']}")
+                scheduler.step(total_batch_loss)
+
+            #print(f"Average Epoch (Train) Loss: {avg_epoch_loss}")
+            #print(f"Epoch Validation Loss: {epoch_validation_loss}")
+            # self.writer.add_scalar('Loss/train', avg_epoch_loss, epoch)
+            # self.writer.add_scalar('Loss/validation', epoch_validation_loss, epoch)
+
+            # if not os.path.exists(save_dir):
+            #     os.makedirs(save_dir)
+            if epoch % (epochs-1) == 0 and epoch != 0:
+                print(f"\n {'-'*10} Saving Checkpoint {epoch} {'-'*10} ")
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': self.model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict()
+                    #'loss': epoch_validation_loss
+                }, save_dir + self.model_name + ".pt")
+
+    def resume_training():
+        pass
      
     def tune(self,  lr, epochs, loss_function, optim, batch_size=32, k=5):
 
@@ -222,6 +314,8 @@ class SupervisedMLFramework:
         print(f"Average validation loss over all splits: {avg_validation_loss_all_splits}")
 
     def predict(self, sample):
+
+        self.model.eval()
 
         sample = sample.to(self.device)
         with torch.no_grad():

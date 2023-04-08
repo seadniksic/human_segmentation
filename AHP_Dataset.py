@@ -26,7 +26,6 @@ class AHP_Dataset(Dataset):
         image = cv2.imread(img_path)
         label = cv2.imread(annotation_path)
 
-
         image = torch.as_tensor(image).permute(2,0,1).float()
         label = torch.as_tensor(label[:,:,0]).long()
 
