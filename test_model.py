@@ -27,7 +27,6 @@ model.load_state_dict(model_save['model_state_dict'])
 
 model = sml.SupervisedMLFramework("eval", model, None, None, init_weights=False, batch_size=32) 
 
-
 vid = cv2.VideoCapture(0)
 base_now=0
 
@@ -40,18 +39,37 @@ frames = 0
 
 while(True):
 
+    base_now = time.time()
     ret, frame = vid.read()
 
+    now = time.time()
+
     image, data = interpolate_downsample(frame, 256)
+
+    if frames > 20:
+        downsample_time += time.time() - base_now
+
+    now = time.time()
 
     image = torch.as_tensor(image).permute(2,0,1) / 255
 
     prediction = model.predict(torch.unsqueeze(image, dim=0)).numpy()
 
+    if frames > 20:
+        inference_time += time.time() - now
+
+    now = time.time()
     output = aggregate_upsample(prediction, frame.shape[0:2], 256)
+
+    if frames > 20:
+        upsample_time += time.time() - now
 
     frame[:,:,2][output > 0] = 255  # in red channel add 128 to pixels that are human
 
+    if frames > 20:
+        total_time += time.time() - base_now
+    frames += 1
+    
     # Display the resulting frame
     cv2.imshow('frame', frame)
     
@@ -59,6 +77,10 @@ while(True):
     # quitting button you may use any
     # desired button of your choice
     if cv2.waitKey(1) & 0xFF == ord('q'):
+        print(f"Average frame time: {total_time / (frames - 21)}")
+        print(f"Average inference time: {inference_time / (frames - 21)}")
+        print(f"Average upsampling time: {upsample_time / (frames - 21)}")
+        print(f"Average downsampling time: {downsample_time / (frames - 21)}")
         break
 
   
