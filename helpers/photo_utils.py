@@ -44,18 +44,10 @@ def interpolate_downsample(img, target_size):
 
     curr_val = max(img.shape)
 
-    print(img.shape)
-
     downsample_factor = math.ceil(curr_val / target_size)
     #convert image largest_dim to leading_dimension size
 
-    ''' Write Interpolation function here '''
-
     downsampled_image = img[::downsample_factor, ::downsample_factor, :]
-
-    #downsampled_image = sk.measure.block_reduce(img, (downsample_factor, downsample_factor, 1), np.mean).astype(int)
-    
-    print(downsampled_image.shape)
 
     height_downsampled, width_downsampled  = downsampled_image.shape[:-1]
 

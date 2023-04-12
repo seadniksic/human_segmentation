@@ -146,7 +146,7 @@ class SupervisedMLFramework:
             }, save_dir + self.model_name + ".pt")
      
     def train_single_batch(self, epochs, loss_function, optimizer, save_dir, scheduler=None):
-        
+
         self.model.train()
         scaler = GradScaler()
         for epoch in range(epochs):
@@ -223,8 +223,87 @@ class SupervisedMLFramework:
                     #'loss': epoch_validation_loss
                 }, save_dir + self.model_name + ".pt")
 
-    def resume_training():
-        pass
+    def resume_training(self, path_to_model, optimizer, epochs, loss_function, save_dir, scheduler=None, use_optim_state_dict=False):
+
+        model_save = torch.load(path_to_model)
+
+        self.model.load_state_dict(model_save['model_state_dict'])
+
+        curr_epoch = model_save['epoch']
+
+        if use_optim_state_dict:
+            optimizer.load_state_dict(model_save['optimizer_state_dict'])
+
+        for epoch in range(curr_epoch + 1, curr_epoch + 1 + epochs):
+            print(f"\n {'-'*10} Epoch {epoch} {'-'*10} ")
+            print(f"Learning rate for this epoch: {optimizer.param_groups[0]['lr']}")
+            total_batch_loss = 0
+            for batch, (X, y) in enumerate(self.train_dataloader):  
+
+
+                X = X.to(self.device)
+                y = y.to(self.device)
+
+                prediction = self.model(X)
+                loss = loss_function(prediction, y)
+
+                class_preds = torch.argmax(prediction, dim=1)
+
+                avg_num_pixels_correct = torch.mean(torch.sum(torch.sum(class_preds == y, dim=2),dim=1, dtype=torch.float32)).item()
+
+                #print(f"avg % pixels correct: {avg_num_pixels_correct / X.shape[2]**2}")
+
+                #Backprop
+                optimizer.zero_grad()
+
+                # scaler.scale(loss).backward()
+                # scaler.step(optimizer)
+                # scaler.update()
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                total_batch_loss += loss.item()
+
+                if batch % 50 == 0:
+                    self.writer.add_scalar(f'Loss/train (batch) epoch {epoch}', loss.item(), batch)
+                    current = (batch + 1) * len(X)
+                    print(f"avg % pixels correct: {avg_num_pixels_correct / X.shape[2]**2}")
+                    print(f"loss: {loss:>7f}  [{current:>5d}/{len(self.train_dataset):>5d}]")
+
+                del X, y, prediction, loss
+                gc.collect()
+                torch.cuda.empty_cache()
+
+            print(f"loss: {total_batch_loss}")
+            
+            epoch_validation_loss = self.test(loss_function)
+
+            self.model.train()
+
+            avg_epoch_loss = total_batch_loss / len(self.train_dataset)
+
+            if scheduler != None:
+                scheduler.step(total_batch_loss)
+
+            print(f"Average Epoch (Train) Loss: {avg_epoch_loss}")
+            print(f"Epoch Validation Loss: {epoch_validation_loss}")
+            self.writer.add_scalar('Loss/train', avg_epoch_loss, epoch)
+            self.writer.add_scalar('Loss/validation', epoch_validation_loss, epoch)
+
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+
+            print(f"\n {'-'*10} Saving Checkpoint {epoch} {'-'*10} ")
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': self.model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': epoch_validation_loss
+            }, save_dir + self.model_name + ".pt")
+
+
      
     def tune(self,  lr, epochs, loss_function, optim, percent_data_to_tune_on=.3, batch_size=32, k=5):
 
@@ -312,12 +391,18 @@ class SupervisedMLFramework:
         avg_validation_loss_all_splits = sum(split_validation_losses) / len(split_validation_losses)
         print(f"Average validation loss over all splits: {avg_validation_loss_all_splits}")
 
-    def predict(self, sample):
+    def predict(self, sample, softmax = True, threshold=None):
 
         self.model.eval()
 
         sample = sample.to(self.device)
         with torch.no_grad():
             pred = self.model(sample)
+            if softmax == True:
+                sm = nn.Softmax(dim=1)
+                pred = sm(pred)
+            if threshold != None:
+                 pred[pred < threshold] = 0
+           
             pred = torch.argmax(pred, dim=1).squeeze()
             return pred.cpu()

@@ -29,6 +29,8 @@ model = sml.SupervisedMLFramework("eval", model, None, None, init_weights=False,
 
 
 vid = cv2.VideoCapture(0)
+vid.set(3, 1920)
+vid.set(4, 1080)
 base_now=0
 
 total_time = 0
@@ -46,14 +48,17 @@ while(True):
 
     image = torch.as_tensor(image).permute(2,0,1) / 255
 
-    prediction = model.predict(torch.unsqueeze(image, dim=0)).numpy()
+    prediction = model.predict(torch.unsqueeze(image, dim=0), threshold=None).numpy()
 
     output = aggregate_upsample(prediction, frame.shape[0:2], 256)
 
-    frame[:,:,2][output > 0] = 255  # in red channel add 128 to pixels that are human
+    # frame[:,:,2][output > 0] = 255  # in red channel add 128 to pixels that are human
+
+
+    output *= 255
 
     # Display the resulting frame
-    cv2.imshow('frame', frame)
+    cv2.imshow('frame', output.astype(np.uint8))
     
     # the 'q' button is set as the
     # quitting button you may use any
