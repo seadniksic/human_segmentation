@@ -8,6 +8,7 @@ import pickle
 import torch.nn as nn
 import torch
 import scipy.ndimage
+import time
 
 def aggregate_downsample(img, target_size):
 
@@ -17,7 +18,44 @@ def aggregate_downsample(img, target_size):
 
     downsample_factor = math.ceil(curr_val / target_size)
     #convert image largest_dim to leading_dimension size
+    #now = time.time()
     downsampled_image = sk.measure.block_reduce(img, (downsample_factor, downsample_factor, 1), np.mean).astype(int)
+    #print(f"block reduce: {time.time() - now}")
+    height_downsampled, width_downsampled  = downsampled_image.shape[:-1]
+
+    #new target image to fill in
+    output_img = np.zeros((target_size, target_size, 3), dtype=np.uint8)
+
+    #pad on both dimensions to ensure that it's 256x256
+    total_padding_rows = target_size - downsampled_image.shape[0]
+    total_padding_cols = target_size - downsampled_image.shape[1]
+
+    top_padding = int(total_padding_rows / 2)
+    left_padding = int(total_padding_cols / 2)
+
+    output_img[top_padding:top_padding+height_downsampled, left_padding:left_padding+width_downsampled, :] = downsampled_image
+
+    # plt.imshow(output_img)
+    # plt.show()
+
+    return output_img, (height_downsampled, width_downsampled)
+
+def interpolate_downsample(img, target_size):
+
+    curr_val = max(img.shape)
+
+    print(img.shape)
+
+    downsample_factor = math.ceil(curr_val / target_size)
+    #convert image largest_dim to leading_dimension size
+
+    ''' Write Interpolation function here '''
+
+    downsampled_image = img[::downsample_factor, ::downsample_factor, :]
+
+    #downsampled_image = sk.measure.block_reduce(img, (downsample_factor, downsample_factor, 1), np.mean).astype(int)
+    
+    print(downsampled_image.shape)
 
     height_downsampled, width_downsampled  = downsampled_image.shape[:-1]
 

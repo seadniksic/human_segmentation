@@ -145,7 +145,8 @@ class SupervisedMLFramework:
                 'loss': epoch_validation_loss
             }, save_dir + self.model_name + ".pt")
      
-    def train_single_batch(self):
+    def train_single_batch(self, epochs, loss_function, optimizer, save_dir, scheduler=None):
+        
         self.model.train()
         scaler = GradScaler()
         for epoch in range(epochs):
@@ -225,11 +226,9 @@ class SupervisedMLFramework:
     def resume_training():
         pass
      
-    def tune(self,  lr, epochs, loss_function, optim, batch_size=32, k=5):
+    def tune(self,  lr, epochs, loss_function, optim, percent_data_to_tune_on=.3, batch_size=32, k=5):
 
         optimizer = optim(self.model.parameters(), lr=lr)
-
-        percent_data_to_tune_on = .3
 
         #Do k fold cross validation on 30% of train portion.
         indices = np.random.permutation(range(len(self.train_dataset)))
