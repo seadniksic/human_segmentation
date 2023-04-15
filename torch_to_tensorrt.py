@@ -2,7 +2,7 @@ import torch_tensorrt
 from custom_models.unet_batchnorm import UNet
 import torch
 
-model_path = "checkpoints\\long_trains\\UNet_Standard_BatchNorm3.pt"
+model_path = "models\\UNet_Standard_BatchNorm3.pt"
 
 model_save = torch.load(model_path)
 model = UNet() # torch module needs to be in eval (not training) mode
